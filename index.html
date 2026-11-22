@@ -6,8 +6,7 @@
   <meta name="theme-color" content="#0f766e" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="ساحتنا" />
-  <title>ساحتنا - مساحتك ومحتواك</title><link rel="manifest" href="manifest.json">
-
+  <title>ساحتنا - مساحتك ومحتواك</title>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -544,7 +543,7 @@
       <div class="jeeb-box">
         <h4>💳 حساب محفظة جيب (Jeeb)</h4>
         <div class="jeeb-note">
-          يتم حفظ رقم محفظتك في «جيب» لتجهيز بيانات الاستلام. التحويل الفعلي للأرباح عبر «جيب» يُفعّل بعد ربط قاعدة البيانات السحابية واعتماد مصدر دخل حقيقي في المنصة.
+          يتم حفظ رقم محفظتك في «جيب» لتجهيز بيانات الاستلام وطلبات الإعلان المميز. التحويل الفعلي يُفعّل بعد ربط قاعدة البيانات السحابية.
         </div>
         <input type="tel" id="jeebAccountInput" placeholder="رقم حسابك في تطبيق جيب (مثلاً: 77xxxxxxxx)" oninput="saveJeebAccount()" />
         <div class="row">
@@ -667,12 +666,16 @@
   <div class="toast" id="toastMsg"></div>
 
   <script>
+    // ضع رابط مشروع Supabase ومفتاح Anon هنا لتفعيل المشاركة السحابية بين جميع المشتركين
     const SUPABASE_URL = "";
     const SUPABASE_ANON_KEY = "";
 
-    const POSTS_KEY = "sahtana_posts_v13";
-    const PROFILE_KEY = "sahtana_profile_v13";
-    const JEEB_KEY = "sahtana_jeeb_v13";
+    const POSTS_KEY = "sahtana_posts_v14";
+    const PROFILE_KEY = "sahtana_profile_v14";
+    const JEEB_KEY = "sahtana_jeeb_v14";
+    const MY_POST_IDS_KEY = "sahtana_my_post_ids_v14";
+    const MY_LIKED_IDS_KEY = "sahtana_my_liked_ids_v14";
+
     let currentFilter = "الكل";
     let selectedImageData = "";
     let editingPostId = null;
@@ -709,7 +712,11 @@
     }
 
     function isCloudEnabled() {
-      return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+      return Boolean(SUPABASE_URL.trim() && SUPABASE_ANON_KEY.trim());
+    }
+
+    function getCleanBaseUrl() {
+      return SUPABASE_URL.trim().replace(/\/+$/, "");
     }
 
     function updateModeBanner() {
@@ -718,7 +725,7 @@
       if (isCloudEnabled()) {
         pill.textContent = "سحابي";
         pill.classList.add("cloud");
-        desc.textContent = "متصل بقاعدة البيانات السحابية لمشاركة المحتوى";
+        desc.textContent = "متصل بالسحابة — المنشورات والردود مشتركة بين الجميع";
       } else {
         pill.textContent = "محلي";
         pill.classList.remove("cloud");
@@ -726,38 +733,68 @@
       }
     }
 
+    function getIdSet(key) {
+      try {
+        const arr = JSON.parse(localStorage.getItem(key) || "[]");
+        return new Set(Array.isArray(arr) ? arr : []);
+      } catch (e) {
+        return new Set();
+      }
+    }
+
+    function saveIdSet(key, setObj) {
+      localStorage.setItem(key, JSON.stringify(Array.from(setObj)));
+    }
+
     async function cloudRequest(path, method = "GET", body = null) {
       if (!isCloudEnabled()) return null;
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+      const baseUrl = getCleanBaseUrl();
+      const apiKey = SUPABASE_ANON_KEY.trim();
+      const res = await fetch(`${baseUrl}/rest/v1/${path}`, {
         method,
         headers: {
           "Content-Type": "application/json",
-          "apikey": SUPABASE_ANON_KEY,
-          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+          "apikey": apiKey,
+          "Authorization": `Bearer ${apiKey}`,
           "Prefer": method === "POST" ? "return=representation" : "return=minimal"
         },
         body: body ? JSON.stringify(body) : null
       });
-      if (!res.ok) throw new Error("Cloud request failed");
-      if (method === "DELETE") return true;
+      if (!res.ok) throw new Error("Cloud request failed: " + res.status);
+      if (method === "DELETE" || method === "PATCH") return true;
       return await res.json();
     }
 
     async function syncFromCloud() {
       if (!isCloudEnabled()) {
-        showToast("الوضع المحلي نشط — أضف بيانات Supabase لتفعيل المزامنة");
+        showToast("الوضع المحلي نشط — أضف بيانات Supabase لتفعيل المشاركة");
         renderPosts();
         return;
       }
       try {
         const rows = await cloudRequest("posts?select=*&order=id.desc");
         if (Array.isArray(rows)) {
-          savePosts(rows);
+          const normalized = rows.map(r => ({
+            id: Number(r.id),
+            author: r.author || "مشترك ساحتنا",
+            region: r.region || "اليمن",
+            category: r.category || "عام",
+            price: r.price || "",
+            currency: r.currency || "جنوبي",
+            phone: r.phone || "",
+            time: r.time || "منذ قليل",
+            content: r.content || "",
+            image: r.image || "",
+            likes: Number(r.likes || 0),
+            comments: Array.isArray(r.comments) ? r.comments : []
+          }));
+          savePosts(normalized);
           renderPosts();
           showToast("تم تحديث المنشورات من السحابة ✓");
         }
       } catch (e) {
         showToast("تعذر الاتصال بالسحابة، يتم عرض النسخة المحلية");
+        renderPosts();
       }
     }
 
@@ -899,11 +936,12 @@
 
     function getPosts() {
       const saved = localStorage.getItem(POSTS_KEY);
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        try { return JSON.parse(saved); } catch (e) {}
+      }
       return [
         {
           id: 1,
-          isMine: false,
           author: "إدارة ساحتنا",
           region: "عدن",
           category: "خدمات وحراج",
@@ -911,11 +949,10 @@
           currency: "سعودي",
           phone: "",
           time: "الآن",
-          content: "أهلاً بك في التحديث الثالث عشر من ساحتنا! جاهز للحفظ كملف index.html والإضافة إلى شاشة الجوال بسهولة.",
+          content: "أهلاً بك في تطبيق ساحتنا! يمكنك نشر عروضك ومنشوراتك والتواصل مباشرة مع المشتركين.",
           image: "",
           likes: 4,
-          likedByMe: false,
-          comments: ["سهل ومباشر على الجوال!"]
+          comments: ["تطبيق عملي وسريع على الجوال!"]
         }
       ];
     }
@@ -925,8 +962,9 @@
     }
 
     function updateActivityStats(posts) {
-      const myPosts = posts.filter(p => p.isMine);
-      const myLikes = myPosts.reduce((sum, p) => sum + (p.likes || 0), 0);
+      const myIds = getIdSet(MY_POST_IDS_KEY);
+      const myPosts = posts.filter(p => myIds.has(Number(p.id)));
+      const myLikes = myPosts.reduce((sum, p) => sum + Number(p.likes || 0), 0);
       document.getElementById("activityCount").textContent = myPosts.length + " منشور";
       document.getElementById("statMyPosts").textContent = myPosts.length;
       document.getElementById("statMyLikes").textContent = myLikes;
@@ -950,7 +988,7 @@
           canvas.height = img.height * scale;
           const ctx = canvas.getContext("2d");
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          selectedImageData = canvas.toDataURL("image/jpeg", 0.75);
+          selectedImageData = canvas.toDataURL("image/jpeg", 0.72);
           const lbl = document.getElementById("fileLabelText");
           lbl.textContent = "✓ تم إرفاق الصورة";
           lbl.classList.add("active");
@@ -1064,7 +1102,7 @@
       }
 
       const posts = getPosts();
-      const post = posts.find(p => p.id === id);
+      const post = posts.find(p => Number(p.id) === Number(id));
       if (post) {
         post.content = newContent;
         post.price = newPrice;
@@ -1090,7 +1128,7 @@
     }
 
     function sharePost(id) {
-      const post = getPosts().find(p => p.id === id);
+      const post = getPosts().find(p => Number(p.id) === Number(id));
       if (!post) return;
       const curLabel = CURRENCY_LABELS[post.currency] || post.currency || "";
       let summary = `منشور من «ساحتنا» (${post.author} - ${post.region}):\n${post.content || ""}`;
@@ -1110,6 +1148,8 @@
 
     function renderPosts() {
       const allPosts = getPosts();
+      const myPostIds = getIdSet(MY_POST_IDS_KEY);
+      const myLikedIds = getIdSet(MY_LIKED_IDS_KEY);
       updateActivityStats(allPosts);
 
       const list = document.getElementById("postsList");
@@ -1137,6 +1177,10 @@
       }
 
       posts.forEach((post) => {
+        const postId = Number(post.id);
+        const isMine = myPostIds.has(postId);
+        const isLiked = myLikedIds.has(postId);
+
         const card = document.createElement("div");
         card.className = "card";
         const commentsHtml = (post.comments || [])
@@ -1151,10 +1195,10 @@
           const curLabel = CURRENCY_LABELS[post.currency] || post.currency || "";
           const convHtml = buildConversionsHtml(post.price, post.currency || "جنوبي");
           const convBtn = convHtml
-            ? `<button class="convert-toggle" onclick="togglePriceConvert(${post.id})">كم تساوي بالعملات الأخرى؟</button>`
+            ? `<button class="convert-toggle" onclick="togglePriceConvert(${postId})">كم تساوي بالعملات الأخرى؟</button>`
             : "";
           const convBox = convHtml
-            ? `<div class="price-converted" id="conv_${post.id}">${convHtml}</div>`
+            ? `<div class="price-converted" id="conv_${postId}">${convHtml}</div>`
             : "";
 
           priceHtml = `
@@ -1173,28 +1217,28 @@
           ? `<a class="whatsapp-link" href="${waUrl}" target="_blank" rel="noopener">واتساب: ${escapeHtml(post.phone)}</a>`
           : "";
 
-        const ownerBtnsHtml = post.isMine
+        const ownerBtnsHtml = isMine
           ? `<div class="owner-btns">
-               <button class="edit-btn" onclick="startEditPost(${post.id})">تعديل</button>
-               <button class="delete-btn" onclick="deletePost(${post.id})">حذف</button>
+               <button class="edit-btn" onclick="startEditPost(${postId})">تعديل</button>
+               <button class="delete-btn" onclick="deletePost(${postId})">حذف</button>
              </div>`
           : "";
 
-        const bodyHtml = editingPostId === post.id
+        const bodyHtml = editingPostId === postId
           ? `<div class="edit-box">
-               <textarea id="edit_content_${post.id}" maxlength="1500">${escapeHtml(post.content || "")}</textarea>
+               <textarea id="edit_content_${postId}" maxlength="1500">${escapeHtml(post.content || "")}</textarea>
                <div class="row">
-                 <input type="text" id="edit_price_${post.id}" maxlength="40" value="${escapeHtml(post.price || "")}" placeholder="السعر (اختياري)" />
-                 <select id="edit_currency_${post.id}" style="max-width:170px;">
+                 <input type="text" id="edit_price_${postId}" maxlength="40" value="${escapeHtml(post.price || "")}" placeholder="السعر (اختياري)" />
+                 <select id="edit_currency_${postId}" style="max-width:170px;">
                    <option value="جنوبي" ${post.currency === "جنوبي" ? "selected" : ""}>ريال يمني (جنوبي)</option>
                    <option value="شمالي" ${post.currency === "شمالي" ? "selected" : ""}>ريال يمني (شمالي)</option>
                    <option value="سعودي" ${post.currency === "سعودي" ? "selected" : ""}>ريال سعودي (SAR)</option>
                    <option value="دولار" ${post.currency === "دولار" ? "selected" : ""}>دولار أمريكي ($)</option>
                  </select>
                </div>
-               <input type="tel" id="edit_phone_${post.id}" maxlength="20" value="${escapeHtml(post.phone || "")}" placeholder="رقم واتساب (اختياري)" />
+               <input type="tel" id="edit_phone_${postId}" maxlength="20" value="${escapeHtml(post.phone || "")}" placeholder="رقم واتساب (اختياري)" />
                <div class="row">
-                 <button class="btn" style="flex:1;" onclick="saveEditPost(${post.id})">حفظ</button>
+                 <button class="btn" style="flex:1;" onclick="saveEditPost(${postId})">حفظ</button>
                  <button class="reset-btn" onclick="cancelEditPost()">إلغاء</button>
                </div>
              </div>`
@@ -1213,18 +1257,18 @@
           ${bodyHtml}
           <div class="post-extra-actions">
             ${phoneHtml}
-            <button class="share-btn" onclick="sharePost(${post.id})">مشاركة</button>
+            <button class="share-btn" onclick="sharePost(${postId})">مشاركة</button>
           </div>
           <div class="actions">
-            <button class="action-btn ${post.likedByMe ? "liked" : ""}" onclick="toggleLike(${post.id})">
+            <button class="action-btn ${isLiked ? "liked" : ""}" onclick="toggleLike(${postId})">
               👍 إعجاب (${post.likes || 0})
             </button>
           </div>
           <div class="comments-box">
             ${commentsHtml}
             <div class="comment-form">
-              <input type="text" id="c_${post.id}" maxlength="400" placeholder="اكتب رداً أو استفساراً..." />
-              <button class="btn" onclick="addComment(${post.id})">إرسال</button>
+              <input type="text" id="c_${postId}" maxlength="400" placeholder="اكتب رداً أو استفساراً..." />
+              <button class="btn" onclick="addComment(${postId})">إرسال</button>
             </div>
           </div>
         `;
@@ -1250,7 +1294,6 @@
 
       const newPost = {
         id: Date.now(),
-        isMine: true,
         author,
         region,
         category,
@@ -1261,9 +1304,12 @@
         content,
         image: selectedImageData,
         likes: 0,
-        likedByMe: false,
         comments: []
       };
+
+      const myPostIds = getIdSet(MY_POST_IDS_KEY);
+      myPostIds.add(newPost.id);
+      saveIdSet(MY_POST_IDS_KEY, myPostIds);
 
       const posts = getPosts();
       posts.unshift(newPost);
@@ -1272,7 +1318,9 @@
       if (isCloudEnabled()) {
         try {
           await cloudRequest("posts", "POST", newPost);
-        } catch (e) {}
+        } catch (e) {
+          showToast("تم الحفظ محلياً، تعذر الرفع للسحابة حالياً");
+        }
       }
 
       document.getElementById("contentInput").value = "";
@@ -1287,20 +1335,23 @@
     }
 
     async function toggleLike(id) {
+      const postId = Number(id);
       const posts = getPosts();
-      const post = posts.find(p => p.id === id);
+      const post = posts.find(p => Number(p.id) === postId);
       if (post) {
-        if (post.likedByMe) {
-          post.likes = Math.max(0, (post.likes || 1) - 1);
-          post.likedByMe = false;
+        const myLikedIds = getIdSet(MY_LIKED_IDS_KEY);
+        if (myLikedIds.has(postId)) {
+          post.likes = Math.max(0, Number(post.likes || 1) - 1);
+          myLikedIds.delete(postId);
         } else {
-          post.likes = (post.likes || 0) + 1;
-          post.likedByMe = true;
+          post.likes = Number(post.likes || 0) + 1;
+          myLikedIds.add(postId);
         }
+        saveIdSet(MY_LIKED_IDS_KEY, myLikedIds);
         savePosts(posts);
         if (isCloudEnabled()) {
           try {
-            await cloudRequest(`posts?id=eq.${id}`, "PATCH", { likes: post.likes });
+            await cloudRequest(`posts?id=eq.${postId}`, "PATCH", { likes: post.likes });
           } catch (e) {}
         }
         renderPosts();
@@ -1308,19 +1359,23 @@
     }
 
     async function addComment(id) {
-      const input = document.getElementById("c_" + id);
+      const postId = Number(id);
+      const input = document.getElementById("c_" + postId);
       const text = input.value.trim();
       if (!text) return;
 
+      const commenter = document.getElementById("authorInput").value.trim();
+      const formattedComment = commenter ? `${commenter}: ${text}` : text;
+
       const posts = getPosts();
-      const post = posts.find(p => p.id === id);
+      const post = posts.find(p => Number(p.id) === postId);
       if (post) {
         post.comments = post.comments || [];
-        post.comments.push(text);
+        post.comments.push(formattedComment);
         savePosts(posts);
         if (isCloudEnabled()) {
           try {
-            await cloudRequest(`posts?id=eq.${id}`, "PATCH", { comments: post.comments });
+            await cloudRequest(`posts?id=eq.${postId}`, "PATCH", { comments: post.comments });
           } catch (e) {}
         }
         showToast("تم إضافة ردك ✓");
@@ -1330,11 +1385,17 @@
 
     async function deletePost(id) {
       if (!confirm("هل تريد حذف هذا المنشور؟")) return;
-      const posts = getPosts().filter(p => p.id !== id);
+      const postId = Number(id);
+      const posts = getPosts().filter(p => Number(p.id) !== postId);
       savePosts(posts);
+
+      const myPostIds = getIdSet(MY_POST_IDS_KEY);
+      myPostIds.delete(postId);
+      saveIdSet(MY_POST_IDS_KEY, myPostIds);
+
       if (isCloudEnabled()) {
         try {
-          await cloudRequest(`posts?id=eq.${id}`, "DELETE");
+          await cloudRequest(`posts?id=eq.${postId}`, "DELETE");
         } catch (e) {}
       }
       showToast("تم حذف المنشور");
@@ -1358,10 +1419,3 @@
   </script>
 </body>
 </html>
-<script>
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-      navigator.serviceWorker.register("sw.js").catch(() => {});
-    });
-  }
-</script>
