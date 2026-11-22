@@ -6,7 +6,8 @@
   <meta name="theme-color" content="#0f766e" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="ساحتنا" />
-  <title>ساحتنا - مساحتك ومحتواك</title>
+  <title>ساحتنا - مساحتك ومحتواك</title><link rel="manifest" href="manifest.json">
+
   <style>
     * { box-sizing: border-box; }
     body {
@@ -1357,3 +1358,10 @@
   </script>
 </body>
 </html>
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("sw.js").catch(() => {});
+    });
+  }
+</script>
