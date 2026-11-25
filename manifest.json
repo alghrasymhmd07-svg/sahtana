@@ -1,11 +1,23 @@
 {
-  "name": "ساحتنا - مساحتك ومحتواك",
+  "name": "ساحتنا",
   "short_name": "ساحتنا",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#eef2f6",
-  "theme_color": "#0f766e",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
   "dir": "rtl",
-  "lang": "ar"
+  "lang": "ar",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
 }

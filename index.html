@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ساحتنا - عالمي</title>
+  <link rel="manifest" href="manifest.json">
+
 <style>
 *{box-sizing:border-box}body{font-family:Tahoma;background:#0f172a;margin:0;color:#fff}
 header{background:linear-gradient(135deg,#0f766e,#7c3aed,#db2777);padding:14px;position:sticky;top:0;z-index:20}
@@ -81,6 +83,13 @@ function changeCountry(){let c=document.getElementById('countrySelect').value;if
 function saveRates(){alert('تم حفظ أسعار اليوم ✅')}
 function showTab(t,btn){document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');['feedTab','reelsTab','marketTab','liveTab'].forEach(id=>document.getElementById(id).style.display='none');document.getElementById(t+'Tab').style.display='block';renderPosts()}
 renderStories();renderPosts();
+</script><script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js');
+  }
 </script>
+
 </body>
 </html>
+  
+
